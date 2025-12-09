@@ -5,6 +5,7 @@
 - Konvertiert alle XML-Dateien im Verzeichnis, der Dateiname wird beibehalten und die Dateeindung auf STA geändert
 - erfolgreich konvertierte XML-Datei werden in das Unterverzeichnis "save" verschoben
 - fehlerhafte Dateien werden in das Unterverzeichnis "error" verschoben
+- benötigt Plugin mbstring
 
 Benutzung:
 php CAMT053ToMT940Converter.php "Verzeichnis"
