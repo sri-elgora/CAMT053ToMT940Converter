@@ -1,4 +1,4 @@
-Konverter Kontoauszüge im CAMT053-Format nach MT940
+# Konverter Kontoauszüge im CAMT053-Format nach MT940
 
 - Konvertiert XML Kontoauszüge in das MT940 Format
 - UTF8 wird nach ISO-8859-1 konvertiert
