@@ -103,17 +103,14 @@ class CAMT053ToMT940Converter
 		// Betrag mit Komma für MT940
 		$amount = $this->formatAmount((string)$entry->Amt);
 
-		// Buchungsschlüssel (4 Zeichen)
-		$bookingCode = 'NMSC';
-		if (isset($entry->BkTxCd->Prtry->Cd)) {
-			$bookingCode = substr((string)$entry->BkTxCd->Prtry->Cd, 0, 4);
-		}
+		// SWIFT-Transaktionscode (3-stellig) extrahieren
+		$swiftCode = $this->extractSWIFTCode($entry);
 
 		// Referenz (max 16 Zeichen)
 		$reference = substr((string)$entry->AcctSvcrRef, 0, 16);
 
-		// Format: :61:YYMMDDMMDD[C/D/RC/RD][Betrag]N[Code][Referenz]
-		return ":61:{$valueDate}{$bookingDate}{$cdtDbt}{$amount}{$bookingCode}{$reference}";
+		// Format: :61:YYMMDDMMDD[C/D/RC/RD][Betrag]N[SWIFT-Code][Referenz]
+		return ":61:{$valueDate}{$bookingDate}{$cdtDbt}{$amount}N{$swiftCode}{$reference}";
 	}
 
 	private function formatPurpose($entry)
@@ -467,6 +464,93 @@ class CAMT053ToMT940Converter
 			return substr($iban, 12, 10);
 		}
 		return '';
+	}
+
+	private function extractSWIFTCode($entry)
+	{
+		// SWIFT-Transaktionscode aus BkTxCd extrahieren
+		// Mapping von Domain/Family/SubFamily zu SWIFT-Codes
+		
+		$domain = '';
+		$family = '';
+		$subFamily = '';
+
+		if (isset($entry->BkTxCd->Domn->Cd)) {
+			$domain = (string)$entry->BkTxCd->Domn->Cd;
+		}
+
+		if (isset($entry->BkTxCd->Domn->Fmly->Cd)) {
+			$family = (string)$entry->BkTxCd->Domn->Fmly->Cd;
+		}
+
+		if (isset($entry->BkTxCd->Domn->Fmly->SubFmlyCd)) {
+			$subFamily = (string)$entry->BkTxCd->Domn->Fmly->SubFmlyCd;
+		}
+
+		// Mapping zu SWIFT MT940 Transaction Type Codes
+		// Die gängigsten SWIFT-Codes:
+		$key = "{$domain}|{$family}|{$subFamily}";
+		
+		$mapping = [
+			// MSC - Miscellaneous (Standard)
+			'PMNT|ICDT|ESCT' => 'TRF', // Transfer (Überweisung)
+			'PMNT|RCDT|ESCT' => 'TRF', // Transfer Credit
+			'PMNT|ICDT|STDO' => 'STO', // Standing Order (Dauerauftrag)
+			'PMNT|RCDT|STDO' => 'STO',
+			'PMNT|RDDT|ESDD' => 'DDT', // Direct Debit Transfer (Lastschrift)
+			'PMNT|IDDT|ESDD' => 'DDT',
+			'PMNT|RDDT|BBDD' => 'DDT', // B2B Lastschrift
+			'PMNT|IDDT|BBDD' => 'DDT',
+			'PMNT|CCRD|POSD' => 'POS', // Point of Sale
+			'PMNT|CCRD|POSC' => 'POS',
+			'PMNT|CCRD|CWDL' => 'ATM', // ATM Withdrawal
+			'PMNT|CNTR|CWDL' => 'CHG', // Charges
+			'PMNT|CNTR|CDPT' => 'CHG',
+			'PMNT|ICHQ|CCHQ' => 'CHK', // Cheque
+			'PMNT|ICHQ|ORCQ' => 'CHK',
+			'PMNT|RCHQ|URCQ' => 'CHK',
+			'PMNT|IRCT|ESCT' => 'TRF', // Instant Payment
+			'PMNT|RRCT|ESCT' => 'TRF',
+			'PMNT|RCDT|SALA' => 'TRF', // Salary
+			'PMNT|RRCT|SALA' => 'TRF',
+			'PMNT|ICDT|RRTN' => 'RTI', // Return
+			'PMNT|IRCT|RRTN' => 'RTI',
+			'PMNT|RRCT|RRTN' => 'RTI',
+			'PMNT|RDDT|UPDD' => 'RTI', // Return/Reversal
+			'PMNT|IDDT|UPDD' => 'RTI',
+			'PMNT|MCRD|CHRG' => 'CHG', // Card Charges
+			'PMNT|MCRD|POSP' => 'POS',
+			'SECU|CUST|DVCA' => 'DIV', // Dividends
+			'SECU|SETT|TRAD' => 'SEC', // Securities
+			'SECU|CUST|CHRG' => 'CHG',
+			'DERV|OTHR|OTHR' => 'DRV', // Derivatives
+			'FORX|SPOT|OTHR' => 'FEX', // Foreign Exchange
+			'TRAD|GUAR|OTHR' => 'LDP', // Loan Deposit
+		];
+
+		if (isset($mapping[$key])) {
+			return $mapping[$key];
+		}
+
+		// Fallback: Standardcode basierend auf Family
+		$familyMapping = [
+			'ICDT' => 'TRF', // Issued Credit Transfer
+			'RCDT' => 'TRF', // Received Credit Transfer
+			'RDDT' => 'DDT', // Received Direct Debit
+			'IDDT' => 'DDT', // Issued Direct Debit
+			'CCRD' => 'POS', // Credit Card
+			'IRCT' => 'TRF', // Instant Payment
+			'RRCT' => 'TRF', // Instant Payment Received
+			'ICHQ' => 'CHK', // Cheque
+			'RCHQ' => 'CHK', // Cheque Received
+		];
+
+		if (isset($familyMapping[$family])) {
+			return $familyMapping[$family];
+		}
+
+		// Letzter Fallback
+		return 'MSC'; // Miscellaneous
 	}
 
 	private function formatDate($date)
